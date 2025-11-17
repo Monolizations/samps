@@ -20,6 +20,33 @@ import { insertRequestByUserId } from "@/services/requestService";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 
+// --- START: Conceptual Data Fetching for Landmarks ---
+type Landmark = {
+  name: string;
+  icon: keyof typeof Ionicons.glyphMap; // Use Ionicons names for icons
+  distance: string; 
+  duration: string;
+};
+
+// 💡 NOTE: In a real app, this function would be in a service file and call a backend 
+// API that internally queries a geospatial service (like Google Maps Places API) 
+// using the provided latitude and longitude.
+const fetchNearbyLandmarks = async (lat: number, lng: number): Promise<Landmark[]> => {
+    // Simulated delay for network fetch
+    // await new Promise(resolve => setTimeout(resolve, 500)); 
+
+    // Mock data matching the user's provided screenshot structure
+    return [
+        { name: "ACE Medical Center", icon: "medkit-outline", distance: "2.3 km", duration: "8 mins" },
+        { name: "SM City CDO", icon: "business-outline", distance: "3.1 km", duration: "12 mins" },
+        { name: "Gaisano City Mall", icon: "business-outline", distance: "1.8 km", duration: "6 mins" },
+        { name: "Puregold Carmen", icon: "cart-outline", distance: "0.9 km", duration: "4 mins" },
+        { name: "Fire Station Carmen", icon: "flame-outline", distance: "1.2 km", duration: "5 mins" },
+        { name: "USTP Campus", icon: "school-outline", distance: "4.5 km", duration: "15 mins" },
+    ];
+};
+// --- END: Conceptual Data Fetching for Landmarks ---
+
 export default function DetailPost() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
@@ -35,6 +62,15 @@ export default function DetailPost() {
     queryFn: () => fetchPostsById(id as string, supabase),
     enabled: !!id,
   });
+  
+  // --- START: New Query for Landmarks ---
+  const { data: nearbyLandmarks, isLoading: isLoadingLandmarks } = useQuery({
+    // Only run query if post data is loaded and has coordinates
+    queryKey: ["landmarks", post?.latitude, post?.longitude],
+    queryFn: () => fetchNearbyLandmarks(post!.latitude!, post!.longitude!),
+    enabled: !!post?.latitude && !!post?.longitude,
+  });
+  // --- END: New Query for Landmarks ---
 
   // Fetch all requests for this post
   const { data: postRequests, isLoading: isCheckingRequest } = useQuery({
@@ -63,19 +99,25 @@ export default function DetailPost() {
     mutate();
   };
 
-  // Button label logic
+  // Button label logic (retains the logic from the previous turn)
   const [buttonLabel, setButtonLabel] = useState("Request Rental");
   const [buttonDisabled, setButtonDisabled] = useState(false);
 
   useEffect(() => {
-    if (!postRequests) {
-      setButtonLabel("Request Rental");
-      setButtonDisabled(!isAvailable);
+    // Ensure postRequests is an array for consistent handling
+    const requestsArray = postRequests 
+      ? (Array.isArray(postRequests) ? postRequests : [postRequests])
+      : [];
+    
+    const myRequest = requestsArray.find((req) => req.user_id === userId);
+    // Check if ANY request exists that is NOT the current user's request
+    const otherUserHasRequested = requestsArray.some((req) => req.user_id !== userId);
+
+    if (!isAvailable || otherUserHasRequested) {
+      setButtonLabel("Unavailable");
+      setButtonDisabled(true);
       return;
     }
-
-    const requestsArray = Array.isArray(postRequests) ? postRequests : [postRequests];
-    const myRequest = requestsArray.find((req) => req.user_id === userId);
 
     if (myRequest) {
       if (myRequest.confirmed) {
@@ -88,10 +130,12 @@ export default function DetailPost() {
         setButtonLabel("Pending Request");
         setButtonDisabled(true);
       }
-    } else {
-      setButtonLabel(isAvailable ? "Request Rental" : "Unavailable");
-      setButtonDisabled(!isAvailable);
+      return; 
     }
+    
+    setButtonLabel("Request Rental");
+    setButtonDisabled(false);
+
   }, [postRequests, userId, isAvailable]);
 
   // Safe cast: only keep string filters from jsonb
@@ -214,6 +258,40 @@ export default function DetailPost() {
           </View>
         )}
 
+        {/* --- START: New Nearby Landmarks Section --- */}
+        {post.latitude != null && post.longitude != null && (
+          <View className="mb-6 border border-gray-100 dark:border-gray-800 rounded-xl p-4 shadow-lg">
+            <Text className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Nearby Landmarks</Text>
+            {isLoadingLandmarks ? (
+                <View>
+                    <Skeleton className="h-14 w-full mb-3 rounded-lg" />
+                    <Skeleton className="h-14 w-full mb-3 rounded-lg" />
+                    <Skeleton className="h-14 w-full mb-3 rounded-lg" />
+                </View>
+            ) : (
+                nearbyLandmarks?.map((landmark, index) => (
+                    <View key={index} className="flex-row items-center justify-between p-3 mb-2 rounded-lg bg-gray-50 dark:bg-gray-800">
+                        <View className="flex-row items-center flex-1 pr-2">
+                            <View className="p-2 rounded-full mr-3 bg-blue-100 dark:bg-blue-700/50">
+                                <Ionicons name={landmark.icon} size={20} color="#3B82F6" />
+                            </View>
+                            <Text className="font-medium text-gray-900 dark:text-white flex-shrink">{landmark.name}</Text>
+                        </View>
+                        <View className="flex-row items-center ml-2">
+                            {/* Distance */}
+                            <Ionicons name="walk-outline" size={16} color="gray" style={{ marginRight: 4 }} />
+                            <Text className="text-xs text-gray-500 mr-3">{landmark.distance}</Text>
+                            {/* Duration */}
+                            <Ionicons name="time-outline" size={16} color="gray" style={{ marginRight: 4 }} />
+                            <Text className="text-xs text-gray-500">{landmark.duration}</Text>
+                        </View>
+                    </View>
+                ))
+            )}
+          </View>
+        )}
+        {/* --- END: New Nearby Landmarks Section --- */}
+        
         {post.price_per_night && (
           <Text className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
             Monthly: ₱ {post.price_per_night}

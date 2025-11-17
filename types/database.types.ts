@@ -14,21 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      admins: {
+        Row: {
+          avatar: string | null
+          created_at: string
+          email: string | null
+          firstname: string | null
+          id: string
+          lastname: string | null
+          role: string | null
+          user_id: string | null
+        }
+        Insert: {
+          avatar?: string | null
+          created_at?: string
+          email?: string | null
+          firstname?: string | null
+          id?: string
+          lastname?: string | null
+          role?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          avatar?: string | null
+          created_at?: string
+          email?: string | null
+          firstname?: string | null
+          id?: string
+          lastname?: string | null
+          role?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       contact_support: {
         Row: {
           created_at: string
+          email: string | null
           id: number
           message: string | null
           user_id: string | null
         }
         Insert: {
           created_at?: string
+          email?: string | null
           id?: number
           message?: string | null
           user_id?: string | null
         }
         Update: {
           created_at?: string
+          email?: string | null
           id?: number
           message?: string | null
           user_id?: string | null
@@ -283,7 +319,10 @@ export type Database = {
           online: boolean | null
           school: string | null
           student_id: number | null
+          student_proof_id: string | null
+          suspended: string | null
           username: string | null
+          verified_at: string | null
         }
         Insert: {
           account_type?: string | null
@@ -298,7 +337,10 @@ export type Database = {
           online?: boolean | null
           school?: string | null
           student_id?: number | null
+          student_proof_id?: string | null
+          suspended?: string | null
           username?: string | null
+          verified_at?: string | null
         }
         Update: {
           account_type?: string | null
@@ -313,9 +355,41 @@ export type Database = {
           online?: boolean | null
           school?: string | null
           student_id?: number | null
+          student_proof_id?: string | null
+          suspended?: string | null
           username?: string | null
+          verified_at?: string | null
         }
         Relationships: []
+      }
+      verify_account: {
+        Row: {
+          created_at: string
+          id: string
+          reject_msg: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          reject_msg?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          reject_msg?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "verify_account_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

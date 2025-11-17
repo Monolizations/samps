@@ -35,6 +35,7 @@ type FormValues = {
   student_id?: number;
   school?: string;
   landlord_proof_id?: string;
+  student_proof_id?: string; // Added student_proof_id to FormValues
   avatar?: string;
 };
 
@@ -45,7 +46,14 @@ export default function CreateUser() {
   const queryClient = useQueryClient();
 
   const [uploading, setUploading] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<string | undefined>();
+  // Renamed selectedImage to landlordSelectedImage for clarity
+  const [landlordSelectedImage, setLandlordSelectedImage] = useState<
+    string | undefined
+  >();
+  // NEW state for student proof
+  const [studentSelectedImage, setStudentSelectedImage] = useState<
+    string | undefined
+  >();
   const [avatar, setAvatar] = useState<string | undefined>();
   const [loading, setLoading] = useState(true); // ⏳ initial loading indicator
 
@@ -61,6 +69,7 @@ export default function CreateUser() {
 
   const role = watch("role");
 
+  // --- Avatar Logic ---
   const pickAvatarAsync = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
@@ -79,7 +88,27 @@ export default function CreateUser() {
   };
 
   const removeAvatar = () => setAvatar(undefined);
+  
+  // --- Generic Proof Image Picker Logic ---
+  const pickProofImageAsync = async (
+    setSelectedImage: React.Dispatch<React.SetStateAction<string | undefined>>
+  ) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      alert("Permission to access gallery is required!");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 1,
+    });
+    if (!result.canceled && result.assets?.length > 0) {
+      setSelectedImage(result.assets[0].uri);
+    }
+  };
 
+  // --- Upload Logic ---
   const uploadImage = async (localUri: string, bucket: string) => {
     try {
       setUploading(true);
@@ -108,10 +137,12 @@ export default function CreateUser() {
   const DEFAULT_AVATAR_URL =
     "https://ptwhyrlrfmpyhkwmljlu.supabase.co/storage/v1/object/public/defaults/clerkimg.png";
 
+  // --- Mutation Logic ---
   const { mutate, isPending } = useMutation({
     mutationFn: async () => {
       let avatarPath: string | undefined;
-      let proofPath: string | undefined;
+      let landlordProofPath: string | undefined; // Renamed to clarify
+      let studentProofPath: string | undefined; // NEW
 
       if (avatar) {
         avatarPath = avatar
@@ -119,9 +150,26 @@ export default function CreateUser() {
           : DEFAULT_AVATAR_URL;
       }
 
-      if (role === "landlord" && selectedImage) {
-        proofPath = await uploadImage(selectedImage, "user-profiles");
+      // Landlord proof upload logic
+      if (role === "landlord" && landlordSelectedImage) {
+        landlordProofPath = await uploadImage(
+          landlordSelectedImage,
+          "user-profiles"
+        );
       }
+      
+      // Student proof upload logic
+      if (role === "student" && studentSelectedImage) {
+        studentProofPath = await uploadImage(
+          studentSelectedImage,
+          "user-profiles"
+        );
+      }
+
+      // 🚨 NEW LOGIC: Set role to landlord_unverified if landlord is selected
+      const roleToSubmit =
+        role === "landlord" ? "landlord_unverified" : role || "";
+
 
       return registerUser(
         {
@@ -130,9 +178,10 @@ export default function CreateUser() {
           contact: Number(watch("contact")),
           student_id: role === "student" ? Number(watch("student_id")) : null,
           school: role === "student" ? watch("school") : null,
-          landlord_proof_id: proofPath,
+          landlord_proof_id: landlordProofPath, // Submitting landlord proof path
+          student_proof_id: studentProofPath, // Submitting student proof path
           avatar: avatarPath,
-          account_type: role || "",
+          account_type: roleToSubmit, // Use the dynamically determined role
           id: user?.id || "",
           username: user?.username || "",
           email: user?.emailAddresses?.[0]?.emailAddress || "",
@@ -160,9 +209,6 @@ export default function CreateUser() {
     return (
       <View className="flex-1 items-center justify-center bg-white dark:bg-black">
         <ActivityIndicator size="large" color="#2563eb" />
-        {/* <Text className="text-gray-600 dark:text-gray-300 mt-3">
-          Loading, please wait...
-        </Text> */}
       </View>
     );
   }
@@ -238,7 +284,7 @@ export default function CreateUser() {
             ))}
           </View>
 
-          {/* Common fields */}
+          {/* Common fields (Firstname, Lastname, Contact) ... */}
           <Label className="text-sm">Firstname</Label>
           <Controller
             control={control}
@@ -313,36 +359,17 @@ export default function CreateUser() {
                   />
                 )}
               />
-            </>
-          )}
 
-          {/* Landlord-only proof */}
-          {role === "landlord" && (
-            <>
-              <Text className="text-sm mb-2">Valid ID Proof</Text>
+              {/* 🖼️ NEW: Student Proof ID Upload */}
+              <Text className="text-sm mb-2">Student ID Proof</Text>
               <TouchableOpacity
-                onPress={async () => {
-                  const { status } =
-                    await ImagePicker.requestMediaLibraryPermissionsAsync();
-                  if (status !== "granted") {
-                    alert("Permission required!");
-                    return;
-                  }
-                  const result = await ImagePicker.launchImageLibraryAsync({
-                    mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                    allowsEditing: true,
-                    quality: 1,
-                  });
-                  if (!result.canceled && result.assets?.length > 0) {
-                    setSelectedImage(result.assets[0].uri);
-                  }
-                }}
+                onPress={() => pickProofImageAsync(setStudentSelectedImage)}
                 className="p-3 rounded-xl border border-dashed border-gray-400 items-center justify-center mb-4 relative"
               >
-                {selectedImage ? (
+                {studentSelectedImage ? (
                   <View>
                     <Image
-                      source={{ uri: selectedImage }}
+                      source={{ uri: studentSelectedImage }}
                       style={{
                         width: 200,
                         height: 200,
@@ -351,7 +378,7 @@ export default function CreateUser() {
                       }}
                     />
                     <TouchableOpacity
-                      onPress={() => setSelectedImage(undefined)}
+                      onPress={() => setStudentSelectedImage(undefined)}
                       style={{
                         position: "absolute",
                         top: 6,
@@ -367,7 +394,53 @@ export default function CreateUser() {
                 ) : (
                   <View className="w-32 h-32 rounded bg-gray-200 items-center justify-center">
                     {uploading ? (
-                      <Skeleton className="h-8 w-48 mb-4 rounded" />
+                      <ActivityIndicator size="small" color="#2563eb" />
+                    ) : (
+                      <Text className="text-gray-500">Tap to select image</Text>
+                    )}
+                  </View>
+                )}
+              </TouchableOpacity>
+            </>
+          )}
+
+          {/* Landlord-only proof */}
+          {role === "landlord" && (
+            <>
+              <Text className="text-sm mb-2">Valid ID Proof</Text>
+              <TouchableOpacity
+                onPress={() => pickProofImageAsync(setLandlordSelectedImage)}
+                className="p-3 rounded-xl border border-dashed border-gray-400 items-center justify-center mb-4 relative"
+              >
+                {landlordSelectedImage ? (
+                  <View>
+                    <Image
+                      source={{ uri: landlordSelectedImage }}
+                      style={{
+                        width: 200,
+                        height: 200,
+                        borderRadius: 10,
+                        resizeMode: "cover",
+                      }}
+                    />
+                    <TouchableOpacity
+                      onPress={() => setLandlordSelectedImage(undefined)}
+                      style={{
+                        position: "absolute",
+                        top: 6,
+                        right: 6,
+                        backgroundColor: "rgba(0,0,0,0.7)",
+                        borderRadius: 9999,
+                        padding: 5,
+                      }}
+                    >
+                      <Ionicons name="close" size={18} color="white" />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View className="w-32 h-32 rounded bg-gray-200 items-center justify-center">
+                    {uploading ? (
+                      <ActivityIndicator size="small" color="#2563eb" />
                     ) : (
                       <Text className="text-gray-500">Tap to select image</Text>
                     )}
